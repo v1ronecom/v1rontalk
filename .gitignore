@@ -1,0 +1,5 @@
+node_modules/
+vendor/
+js/v1rontalk-main.js
+.DS_Store
+*.log

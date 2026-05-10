@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+    <id>v1rontalk</id>
+    <name>V1Ron Talk Bot</name>
+    <summary>Bridge V1RonDHM AI Characters into Nextcloud Talk with file access</summary>
+    <description>
+        Integrates V1Ron Digital Human Manager characters into Nextcloud Talk as bot participants.
+        Characters can read, analyze, edit, and save files in Nextcloud via chat commands.
+        Requires a WordPress instance with V1RonDHM plugin v2.24.0+.
+    </description>
+    <version>1.0.0</version>
+    <licence>agpl</licence>
+    <author mail="support@v1ron.com">V1Ron</author>
+    <namespace>V1RonTalk</namespace>
+    <category>integration</category>
+    <website>https://www.v1ron.com</website>
+    <bugs>https://github.com/v1ron/v1rontalk/issues</bugs>
+    <repository type="git">https://github.com/v1ron/v1rontalk</repository>
+    <dependencies>
+        <nextcloud min-version="30" max-version="32"/>
+    </dependencies>
+    <settings>
+        <admin>OCA\V1RonTalk\Settings\Admin</admin>
+        <admin-section>OCA\V1RonTalk\Settings\AdminSection</admin-section>
+    </settings>
+</info>
