@@ -96,7 +96,7 @@
     </ol>
 </div>
 
-<script>
+<script nonce="<?php p(\OC::$server->getContentSecurityPolicyNonceManager()->getNonce()); ?>">
     document.addEventListener('DOMContentLoaded', function () {
         const form = document.getElementById('v1rontalk-settings-form');
         const saveBtn = document.getElementById('v1ron-save-btn');
@@ -112,21 +112,43 @@
             formData.forEach((value, key) => { data[key] = value; });
             data.auto_register = formData.get('auto_register') === '1';
 
+            console.log('[V1RonTalk] Saving settings:', data);
+            console.log('[V1RonTalk] requestToken:', OC?.requestToken);
+
             try {
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'requesttoken': OC?.requestToken ?? '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                };
                 const resp = await fetch('<?php p(\OC::$server->get(\OCP\IURLGenerator::class)->linkToRoute('v1rontalk.settings.save')); ?>', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'OCS-APIRequest': 'true' },
+                    headers: headers,
                     body: JSON.stringify(data),
                 });
-                const result = await resp.json();
+                console.log('[V1RonTalk] Save response status:', resp.status);
+                const text = await resp.text();
+                console.log('[V1RonTalk] Save response body:', text);
+                let result;
+                try {
+                    result = JSON.parse(text);
+                } catch (parseErr) {
+                    console.error('[V1RonTalk] Failed to parse response as JSON:', text);
+                    saveMsg.textContent = '✗ Server returned non-JSON response. Check console.';
+                    saveMsg.style.color = 'red';
+                    return;
+                }
                 if (result.success) {
                     saveMsg.textContent = '✓ Saved successfully! Bots will register on next app boot.';
                     saveMsg.style.color = 'green';
                 } else {
-                    saveMsg.textContent = '✗ Error: ' + (result.error || 'Unknown');
+                    const errMsg = result.error || result.ocs?.data?.error || 'Unknown';
+                    console.error('[V1RonTalk] Save error:', errMsg);
+                    saveMsg.textContent = '✗ Error: ' + errMsg;
                     saveMsg.style.color = 'red';
                 }
             } catch (err) {
+                console.error('[V1RonTalk] Network error:', err);
                 saveMsg.textContent = '✗ Network error: ' + err.message;
                 saveMsg.style.color = 'red';
             } finally {
@@ -140,19 +162,39 @@
             list.innerHTML = '<p>Checking...</p>';
 
             try {
-                const resp = await fetch('<?php p(\OC::$server->get(\OCP\IURLGenerator::class)->linkToRoute('v1rontalk.settings.load')); ?>');
-                const result = await resp.json();
-                if (result.success) {
-                    list.innerHTML = '<p>✓ Connected to WordPress URL: <code>' + result.wordpress_url + '</code></p>';
-                    if (result.has_api_key) {
+                const resp = await fetch('<?php p(\OC::$server->get(\OCP\IURLGenerator::class)->linkToRoute('v1rontalk.settings.load')); ?>', {
+                    headers: {
+                        'requesttoken': OC?.requestToken ?? '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+                console.log('[V1RonTalk] Load settings response status:', resp.status);
+                const text = await resp.text();
+                console.log('[V1RonTalk] Load settings response body:', text);
+                let result;
+                try {
+                    result = JSON.parse(text);
+                } catch (parseErr) {
+                    console.error('[V1RonTalk] Failed to parse settings response:', text);
+                    list.innerHTML = '<p>✗ Server returned non-JSON response. Check console.</p>';
+                    return;
+                }
+                // Support both direct JSON and OCS envelope formats
+                const data = result.ocs?.data ?? result;
+                if (data.success) {
+                    list.innerHTML = '<p>✓ Connected to WordPress URL: <code>' + (data.wordpress_url || '(empty)') + '</code></p>';
+                    if (data.has_api_key) {
                         list.innerHTML += '<p>✓ API key is configured</p>';
                     } else {
                         list.innerHTML += '<p>✗ No API key configured</p>';
                     }
                 } else {
-                    list.innerHTML = '<p>✗ Error: ' + (result.error || 'Unknown') + '</p>';
+                    const errMsg = data.error || 'Unknown';
+                    console.error('[V1RonTalk] Settings load error:', errMsg);
+                    list.innerHTML = '<p>✗ Error: ' + errMsg + '</p>';
                 }
             } catch (err) {
+                console.error('[V1RonTalk] Settings load network error:', err);
                 list.innerHTML = '<p>✗ Network error: ' + err.message + '</p>';
             }
         });

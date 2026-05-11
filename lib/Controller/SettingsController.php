@@ -7,18 +7,22 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
 use OCP\IRequest;
+use Psr\Log\LoggerInterface;
 
 class SettingsController extends Controller {
 
     private IConfig $config;
+    private LoggerInterface $logger;
 
     public function __construct(
         string $appName,
         IRequest $request,
-        IConfig $config
+        IConfig $config,
+        LoggerInterface $logger
     ) {
         parent::__construct($appName, $request);
         $this->config = $config;
+        $this->logger = $logger;
     }
 
     /**
@@ -44,6 +48,7 @@ class SettingsController extends Controller {
      */
     public function save(): JSONResponse {
         if (!$this->isAdmin()) {
+            $this->logger->warning('Settings save attempted by non-admin');
             return new JSONResponse(['success' => false, 'error' => 'Admin access required'], 403);
         }
 
@@ -52,7 +57,15 @@ class SettingsController extends Controller {
         $botUser = $this->request->getParam('bot_system_user', '');
         $autoRegister = (bool) $this->request->getParam('auto_register', true);
 
+        $this->logger->info('Settings save called', [
+            'wordpress_url' => $wpUrl ? substr($wpUrl, 0, 50) . '...' : '(empty)',
+            'has_api_key' => !empty($apiKey),
+            'bot_user' => $botUser,
+            'auto_register' => $autoRegister,
+        ]);
+
         if (empty($wpUrl)) {
+            $this->logger->warning('Save rejected: WordPress URL is empty');
             return new JSONResponse(['success' => false, 'error' => 'WordPress URL is required'], 400);
         }
 
@@ -72,6 +85,7 @@ class SettingsController extends Controller {
         // Reset bot registration flag so bots re-register on next boot
         $this->config->setAppValue('v1rontalk', 'bots_registered_version', '0');
 
+        $this->logger->info('Settings saved successfully');
         return new JSONResponse(['success' => true]);
     }
 

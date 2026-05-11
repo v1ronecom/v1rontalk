@@ -76,7 +76,7 @@ class TalkBotService implements IEventListener {
 
             $this->config->setAppValue('v1rontalk', 'bots_registered_version', $appVersion);
             $this->logger->info("Registered {$botsRegistered} V1Ron characters as Talk bots");
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->logger->error('Failed to register bots: ' . $e->getMessage());
         }
     }
@@ -84,41 +84,41 @@ class TalkBotService implements IEventListener {
     /**
      * Register a single character as a Talk bot.
      *
-     * Uses Talk's Bot API if available (Talk >= 18 / NC >= 30).
-     * Falls back to registering a bot command.
+     * Uses Talk's BotServer API (Talk 21 / NC 31+).
      */
     private function registerSingleBot(array $character): bool {
         try {
-            $talkBotService = $this->server->get(\OCA\Talk\Service\BotService::class);
+            $botServerMapper = $this->server->get(\OCA\Talk\Model\BotServerMapper::class);
 
-            // Check if this bot URL is already registered
-            $existingBots = $talkBotService->getBots();
             $botUrl = $this->urlGen->linkToRouteAbsolute('v1rontalk.bot.handle');
             $charId = $character['id'];
 
+            // Check if this bot URL is already registered
+            $existingBots = $botServerMapper->getAllBots();
             foreach ($existingBots as $bot) {
                 if ($bot->getUrl() === $botUrl && $bot->getName() === $character['name']) {
                     return true; // Already registered
                 }
             }
 
-            // Register as a webhook bot
-            $talkBotService->registerBot(
-                name: $character['name'],
-                description: substr($character['description'] ?? 'AI character from V1Ron', 0, 400),
-                url: $botUrl,
-                secret: $this->config->getAppValue('v1rontalk', 'api_key', ''),
-                route: 'v1ron-' . $charId,
-            );
+            // Register as a webhook bot in talk_bots_server table
+            $bot = new \OCA\Talk\Model\BotServer();
+            $bot->setName($character['name']);
+            $bot->setDescription(substr($character['description'] ?? 'AI character from V1Ron', 0, 400));
+            $bot->setUrl($botUrl);
+            $bot->setUrlHash(sha1($botUrl));
+            $bot->setSecret($this->config->getAppValue('v1rontalk', 'api_key', ''));
+            $bot->setState(\OCA\Talk\Model\Bot::STATE_ENABLED);
+            $bot->setFeatures(\OCA\Talk\Model\Bot::FEATURE_WEBHOOK + \OCA\Talk\Model\Bot::FEATURE_RESPONSE);
+            $botServerMapper->insert($bot);
 
             $this->logger->info("Registered bot: {$character['name']} (ID: {$charId})");
             return true;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->logger->warning("Could not register bot {$character['name']}: " . $e->getMessage());
 
             // Fallback: register as a bot command
             try {
-                // Try the older Talk bot command API
                 if (class_exists('\OCA\Talk\Service\BotCommandService')) {
                     $cmdService = $this->server->get(\OCA\Talk\Service\BotCommandService::class);
                     $cmdService->installBotCommand(
@@ -128,7 +128,7 @@ class TalkBotService implements IEventListener {
                     );
                     return true;
                 }
-            } catch (\Exception $e2) {
+            } catch (\Throwable $e2) {
                 $this->logger->error("Bot command fallback also failed: " . $e2->getMessage());
             }
 
@@ -404,7 +404,7 @@ class TalkBotService implements IEventListener {
         try {
             $fileService = $this->server->get(\OCP\IServerContainer::class)->get(FileService::class);
             return $fileService->readFile($ncUserId, $path);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -413,7 +413,7 @@ class TalkBotService implements IEventListener {
         try {
             $fileService = $this->server->get(\OCP\IServerContainer::class)->get(FileService::class);
             return $fileService->writeFile($ncUserId, $path, $content);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
@@ -422,7 +422,7 @@ class TalkBotService implements IEventListener {
         try {
             $fileService = $this->server->get(\OCP\IServerContainer::class)->get(FileService::class);
             return $fileService->listDirectory($ncUserId, $dir);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
