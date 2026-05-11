@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace OCA\V1RonTalk\Controller;
 
+use OCA\V1RonTalk\Service\TalkBotService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
@@ -13,16 +14,19 @@ class SettingsController extends Controller {
 
     private IConfig $config;
     private LoggerInterface $logger;
+    private TalkBotService $talkBot;
 
     public function __construct(
         string $appName,
         IRequest $request,
         IConfig $config,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        TalkBotService $talkBot
     ) {
         parent::__construct($appName, $request);
         $this->config = $config;
         $this->logger = $logger;
+        $this->talkBot = $talkBot;
     }
 
     /**
@@ -82,11 +86,28 @@ class SettingsController extends Controller {
 
         $this->config->setAppValue('v1rontalk', 'auto_register_bots', $autoRegister ? '1' : '0');
 
-        // Reset bot registration flag so bots re-register on next boot
-        $this->config->setAppValue('v1rontalk', 'bots_registered_version', '0');
+        // Force immediate bot registration so characters are available in Talk right away
+        $botsRegistered = 0;
+        if ($autoRegister) {
+            $botsRegistered = $this->talkBot->forceRegisterBots();
+        } else {
+            $this->config->setAppValue('v1rontalk', 'bots_registered_version', '0');
+        }
 
-        $this->logger->info('Settings saved successfully');
-        return new JSONResponse(['success' => true]);
+        $this->logger->info('Settings saved successfully', ['bots_registered' => $botsRegistered]);
+        return new JSONResponse(['success' => true, 'bots_registered' => $botsRegistered]);
+    }
+
+    /**
+     * POST /api/settings/sync-bots — Force re-sync all characters as Talk bots.
+     */
+    public function syncBots(): JSONResponse {
+        if (!$this->isAdmin()) {
+            return new JSONResponse(['success' => false, 'error' => 'Admin access required'], 403);
+        }
+
+        $count = $this->talkBot->forceRegisterBots();
+        return new JSONResponse(['success' => true, 'bots_registered' => $count]);
     }
 
     private function isAdmin(): bool {

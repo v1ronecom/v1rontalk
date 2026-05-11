@@ -10,6 +10,8 @@ use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCA\V1RonTalk\Service\TalkBotService;
 use OCA\V1RonTalk\Service\V1RonApiService;
+use OCA\V1RonTalk\Settings\Personal;
+use OCA\V1RonTalk\Settings\PersonalSection;
 
 class Application extends App implements IBootstrap {
 
@@ -26,6 +28,9 @@ class Application extends App implements IBootstrap {
                 $c->get(V1RonApiService::class)
             );
         });
+
+        $context->registerPersonalSettings(Personal::class);
+        $context->registerPersonalSection(PersonalSection::class);
     }
 
     public function boot(IBootContext $context): void {

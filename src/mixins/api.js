@@ -29,10 +29,39 @@ export default {
         },
 
         /**
+         * Helper for internal NC app endpoints (not proxied to WordPress).
+         */
+        async ncApi(path, data = {}, method = 'POST') {
+            try {
+                const url = generateUrl('/apps/v1rontalk' + path)
+                const response = method === 'GET'
+                    ? await axios.get(url, { params: data })
+                    : await axios.post(url, data)
+                return response.data
+            } catch (error) {
+                console.error('[V1RonTalk] NC API error:', error)
+                return { success: false, error: error.message }
+            }
+        },
+
+        /**
+         * Sync the current Nextcloud user to WordPress.
+         * Returns balance, wp_user_id, and assigned characters.
+         */
+        async syncUser() {
+            return this.ncApi('/api/user/sync', {})
+        },
+
+        /**
          * Get available characters.
+         * When ncUserId is present, fetches public + user-assigned characters.
          */
         async getCharacters(ncUserId) {
-            return this.v1ronApi('characters', { user_id: ncUserId, public: '1' })
+            // public=0 returns all characters the user can access (public + assigned)
+            const params = ncUserId
+                ? { user_id: ncUserId, public: '0' }
+                : { public: '1' }
+            return this.v1ronApi('characters', params)
         },
 
         /**

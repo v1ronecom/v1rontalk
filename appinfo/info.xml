@@ -23,5 +23,7 @@
     <settings>
         <admin>OCA\V1RonTalk\Settings\Admin</admin>
         <admin-section>OCA\V1RonTalk\Settings\AdminSection</admin-section>
+        <personal>OCA\V1RonTalk\Settings\Personal</personal>
+        <personal-section>OCA\V1RonTalk\Settings\PersonalSection</personal-section>
     </settings>
 </info>

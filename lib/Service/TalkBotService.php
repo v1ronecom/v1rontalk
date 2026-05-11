@@ -38,46 +38,54 @@ class TalkBotService implements IEventListener {
     }
 
     /**
-     * Register V1Ron characters as Talk bots in the database.
-     *
-     * This is called on app boot. It fetches characters from WordPress
-     * and registers each one as a bot in Nextcloud Talk.
+     * Register V1Ron characters as Talk bots (skips if already up-to-date).
      */
     public function registerBots(): void {
-        $wpUrl = $this->config->getAppValue('v1rontalk', 'wordpress_url', '');
+        $wpUrl  = $this->config->getAppValue('v1rontalk', 'wordpress_url', '');
         $apiKey = $this->config->getAppValue('v1rontalk', 'api_key', '');
 
         if (empty($wpUrl) || empty($apiKey)) {
-            return; // Not configured yet
+            return;
         }
 
         $registeredVersion = $this->config->getAppValue('v1rontalk', 'bots_registered_version', '0');
-        $appVersion = $this->config->getAppValue('v1rontalk', 'installed_version', '0');
+        $appVersion        = $this->config->getAppValue('v1rontalk', 'installed_version', '0');
 
         if (version_compare($registeredVersion, $appVersion, '>=')) {
-            return; // Already registered
+            return;
         }
 
+        $this->forceRegisterBots();
+    }
+
+    /**
+     * Force re-registration of all characters as Talk bots (ignores version cache).
+     * Called when admin saves settings or triggers a manual sync.
+     *
+     * @return int Number of bots successfully registered.
+     */
+    public function forceRegisterBots(): int {
         try {
-            // Fetch characters from WordPress (public ones)
             $result = $this->v1ronApi->getCharacters('', true);
             if (!$result['success'] || !isset($result['characters'])) {
                 $this->logger->warning('Could not fetch characters for bot registration');
-                return;
+                return 0;
             }
 
-            // Register each character as a bot command via Talk's API
-            $botsRegistered = 0;
+            $count = 0;
             foreach ($result['characters'] as $char) {
                 if ($this->registerSingleBot($char)) {
-                    $botsRegistered++;
+                    $count++;
                 }
             }
 
+            $appVersion = $this->config->getAppValue('v1rontalk', 'installed_version', '1.0.0');
             $this->config->setAppValue('v1rontalk', 'bots_registered_version', $appVersion);
-            $this->logger->info("Registered {$botsRegistered} V1Ron characters as Talk bots");
+            $this->logger->info("Registered {$count} V1Ron characters as Talk bots (forced)");
+            return $count;
         } catch (\Throwable $e) {
             $this->logger->error('Failed to register bots: ' . $e->getMessage());
+            return 0;
         }
     }
 
@@ -168,52 +176,64 @@ class TalkBotService implements IEventListener {
      * Handle BotMessageEvent (Talk >= 18).
      */
     private function handleBotMessage($event): void {
-        $message = $event->getMessage();
+        $message      = $event->getMessage();
         $conversation = $event->getConversation();
-        $actor = $event->getActor();
-        $bot = $event->getBot();
+        $actor        = $event->getActor();
+        $bot          = $event->getBot();
 
-        $ncUserId = $actor->getUserId();
-        $botName = $bot->getName();
+        $ncUserId  = $actor->getUserId();
         $convToken = $conversation->getToken();
-        $text = $message->getMessage();
+        $text      = $message->getMessage();
 
         if (!$ncUserId || !$text) return;
 
-        // Find which character this bot corresponds to
+        // type 2 = group conversation, 3 = public, 1 = one-to-one
+        $convType   = method_exists($conversation, 'getType') ? $conversation->getType() : 1;
+        $isGroupChat = $convType >= 2;
+
         $charId = $this->getCharacterIdFromBotUrl($bot->getUrl());
 
-        $this->processAndRespond($charId, $ncUserId, $text, $convToken);
+        $this->processAndRespond($charId, $ncUserId, $text, $convToken, $isGroupChat);
     }
 
     /**
      * Handle BotInvokeEvent (Talk 15-17).
      */
     private function handleBotInvoke($event): void {
-        $command = $event->getCommand();
+        $command      = $event->getCommand();
         $conversation = $event->getConversation();
-        $actor = $event->getActor();
+        $actor        = $event->getActor();
 
-        $ncUserId = $actor->getUserId();
+        $ncUserId  = $actor->getUserId();
         $convToken = $conversation->getToken();
-        $text = $event->getArguments() ?? '';
+        $text      = $event->getArguments() ?? '';
 
         if (!$ncUserId) return;
 
-        // Extract character ID from command (format: /v1ron-{id})
+        $convType    = method_exists($conversation, 'getType') ? $conversation->getType() : 1;
+        $isGroupChat = $convType >= 2;
+
         $charId = 0;
         if (preg_match('/^v1ron-(\d+)$/', $command?->getName() ?? '', $m)) {
             $charId = (int) $m[1];
         }
 
-        $this->processAndRespond($charId, $ncUserId, $text, $convToken);
+        $this->processAndRespond($charId, $ncUserId, $text, $convToken, $isGroupChat);
     }
 
     /**
      * Process a message and send response back to Talk.
+     *
+     * @param bool $isGroupChat Whether the message came from a group conversation.
      */
-    private function processAndRespond(int $charId, string $ncUserId, string $text, string $convToken): void {
+    private function processAndRespond(int $charId, string $ncUserId, string $text, string $convToken, bool $isGroupChat = false): void {
         if ($charId <= 0 || empty($text)) return;
+
+        // Check per-user "allow bots to chat" preference (default: enabled)
+        $allowBots = $this->config->getUserValue($ncUserId, 'v1rontalk', 'allow_bots', '1') === '1';
+        if (!$allowBots) {
+            return; // User has opted out — silently ignore
+        }
 
         // Sync the user to WordPress first
         $userInfo = $this->v1ronApi->syncUser($ncUserId);
@@ -260,7 +280,8 @@ class TalkBotService implements IEventListener {
             $ncUserId,
             $text,
             $fileContext,
-            $refFileUrls
+            $refFileUrls,
+            $isGroupChat
         );
 
         if (!$result['success']) {

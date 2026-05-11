@@ -122,13 +122,16 @@ class V1RonApiService {
 
     /**
      * Send a chat message to a character.
+     *
+     * @param bool $isGroupChat Whether the message originates from a group Talk conversation.
      */
-    public function chat(int $charId, string $ncUserId, string $message, string $fileContext = '', array $refFileUrls = []): array {
+    public function chat(int $charId, string $ncUserId, string $message, string $fileContext = '', array $refFileUrls = [], bool $isGroupChat = false): array {
         return $this->proxy("characters/{$charId}/chat", [
-            'user_id'       => $ncUserId,
-            'message'       => $message,
-            'file_context'  => $fileContext,
-            'ref_file_urls' => $refFileUrls,
+            'user_id'        => $ncUserId,
+            'message'        => $message,
+            'file_context'   => $fileContext,
+            'ref_file_urls'  => $refFileUrls,
+            'is_group_chat'  => $isGroupChat,
         ], 'POST');
     }
 

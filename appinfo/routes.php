@@ -16,8 +16,14 @@ return [
         // V1Ron API proxy — frontend uses this to talk to WordPress
         ['name' => 'v1ron_api#proxy',   'url' => '/api/v1ron/proxy',   'verb' => 'POST'],
 
-        // Settings
-        ['name' => 'settings#save',     'url' => '/api/settings',      'verb' => 'POST'],
-        ['name' => 'settings#load',     'url' => '/api/settings',      'verb' => 'GET'],
+        // Admin settings
+        ['name' => 'settings#save',       'url' => '/api/settings',          'verb' => 'POST'],
+        ['name' => 'settings#load',       'url' => '/api/settings',          'verb' => 'GET'],
+        ['name' => 'settings#sync_bots',  'url' => '/api/settings/sync-bots','verb' => 'POST'],
+
+        // Per-user settings (allow bots, account sync)
+        ['name' => 'user_settings#load',  'url' => '/api/user/settings',     'verb' => 'GET'],
+        ['name' => 'user_settings#save',  'url' => '/api/user/settings',     'verb' => 'POST'],
+        ['name' => 'user_settings#sync',  'url' => '/api/user/sync',         'verb' => 'POST'],
     ],
 ];

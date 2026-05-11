@@ -42,11 +42,14 @@ class BotController extends Controller {
     public function handle(): JSONResponse {
         $data = $this->request->getParams();
 
-        $ncUserId  = $data['user_id'] ?? '';
-        $message   = $data['message'] ?? '';
-        $convToken = $data['conversation_token'] ?? '';
-        $botId     = $data['bot_id'] ?? '';
-        $botName   = $data['bot_name'] ?? '';
+        $ncUserId     = $data['user_id'] ?? '';
+        $message      = $data['message'] ?? '';
+        $convToken    = $data['conversation_token'] ?? '';
+        $botId        = $data['bot_id'] ?? '';
+        $botName      = $data['bot_name'] ?? '';
+        // NC Talk sends conversation type: 1=one-to-one, 2=group, 3=public
+        $convType     = (int) ($data['conversation_type'] ?? 1);
+        $isGroupChat  = $convType >= 2;
 
         if (empty($ncUserId) || empty($message)) {
             return new JSONResponse([
@@ -56,7 +59,6 @@ class BotController extends Controller {
         }
 
         // Extract character ID from bot name or ID
-        // Bot names follow the pattern: "V1Ron-{character_id}"
         $charId = 0;
         if (preg_match('/^v1ron[_-]?(\d+)$/i', $botName, $m)) {
             $charId = (int) $m[1];
@@ -80,20 +82,20 @@ class BotController extends Controller {
             ], 500);
         }
 
-        // Send message to character
-        $result = $this->v1ronApi->chat($charId, $ncUserId, $message);
+        // Send message to character, passing group chat flag for credit cost calculation
+        $result = $this->v1ronApi->chat($charId, $ncUserId, $message, '', [], $isGroupChat);
 
         if (!$result['success']) {
             return new JSONResponse([
                 'success' => false,
                 'error'   => $result['error'] ?? 'Chat failed',
                 'code'    => $result['code'] ?? '',
-            ], 200); // Return 200 even on error so Talk doesn't retry
+            ], 200); // Return 200 so Talk doesn't retry
         }
 
         return new JSONResponse([
-            'success' => true,
-            'reply'   => $result['reply'] ?? '',
+            'success'       => true,
+            'reply'         => $result['reply'] ?? '',
             'memories'      => $result['memories'] ?? [],
             'image_prompts' => $result['image_prompts'] ?? [],
         ]);
