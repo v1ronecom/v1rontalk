@@ -24,14 +24,18 @@ export default {
                 console.error('[V1RonTalk] API error:', error)
                 const data = error.response?.data
                 if (data) return data
-                return { success: false, error: error.message }
+                return { success: false, error: error.message || String(error) }
             }
         },
 
         /**
          * Helper for internal NC app endpoints (not proxied to WordPress).
+         *
+         * Retries once on the Chrome "message channel closed" error that occurs
+         * when Nextcloud's service worker is not yet ready to handle requests on
+         * first page load.
          */
-        async ncApi(path, data = {}, method = 'POST') {
+        async ncApi(path, data = {}, method = 'POST', _retried = false) {
             try {
                 const url = generateUrl('/apps/v1rontalk' + path)
                 const response = method === 'GET'
@@ -39,8 +43,15 @@ export default {
                     : await axios.post(url, data)
                 return response.data
             } catch (error) {
+                // Chrome throws this when the SW message channel closes mid-flight.
+                // Waiting one tick lets the SW context fully initialize before retry.
+                if (!_retried && error && typeof error.message === 'string'
+                    && error.message.includes('message channel closed')) {
+                    await new Promise(resolve => setTimeout(resolve, 300))
+                    return this.ncApi(path, data, method, true)
+                }
                 console.error('[V1RonTalk] NC API error:', error)
-                return { success: false, error: error.message }
+                return { success: false, error: error.message || String(error) }
             }
         },
 

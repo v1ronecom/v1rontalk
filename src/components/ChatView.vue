@@ -97,34 +97,63 @@ export default {
             loadingHistory: false,
             showFilePicker: false,
             attachedFile: null,
+            _alive: true,
         }
     },
-    async mounted() {
-        await this.loadCharacter()
-        await this.loadHistory()
-        await this.loadBalance()
-        this.scrollToBottom()
+    // Non-async mounted — prevents uncaught promise rejection in Vue 2 Options API
+    mounted() {
+        this._initChat().catch(err => {
+            console.error('[V1RonTalk] ChatView mount error:', err)
+            this.loadingHistory = false
+        })
+    },
+    beforeDestroy() {
+        this._alive = false
     },
     methods: {
+        async _initChat() {
+            await this.loadCharacter()
+            if (!this._alive) return
+            await this.loadHistory()
+            if (!this._alive) return
+            await this.loadBalance()
+            if (!this._alive) return
+            this.scrollToBottom()
+        },
         async loadCharacter() {
-            const result = await this.getCharacters(this.ncUserId)
-            if (result.success) {
-                this.character = (result.characters || []).find(c => c.id === this.characterId) || null
+            try {
+                const result = await this.getCharacters(this.ncUserId)
+                if (!this._alive) return
+                if (result.success) {
+                    this.character = (result.characters || []).find(c => c.id === this.characterId) || null
+                }
+            } catch (err) {
+                console.warn('[V1RonTalk] loadCharacter error:', err)
             }
         },
         async loadHistory() {
             this.loadingHistory = true
-            const result = await this.getChatHistory(this.characterId, this.ncUserId)
-            if (result.success) {
-                this.messages = result.messages || []
+            try {
+                const result = await this.getChatHistory(this.characterId, this.ncUserId)
+                if (!this._alive) return
+                if (result.success) {
+                    this.messages = result.messages || []
+                }
+            } catch (err) {
+                console.warn('[V1RonTalk] loadHistory error:', err)
             }
             this.loadingHistory = false
             this.$nextTick(() => this.scrollToBottom())
         },
         async loadBalance() {
-            const result = await this.getBalance(this.ncUserId)
-            if (result.success) {
-                this.balance = result.balance_formatted || ''
+            try {
+                const result = await this.getBalance(this.ncUserId)
+                if (!this._alive) return
+                if (result.success) {
+                    this.balance = result.balance_formatted || ''
+                }
+            } catch (err) {
+                console.warn('[V1RonTalk] loadBalance error:', err)
             }
         },
         async sendMessage(e) {

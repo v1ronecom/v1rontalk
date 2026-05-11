@@ -84,6 +84,7 @@ export default {
             error: '',
             syncError: '',
             balance: '',
+            _alive: true,
         }
     },
     computed: {
@@ -95,16 +96,33 @@ export default {
             return this.chars.filter(c => c.is_public && !assignedIds.has(c.id))
         },
     },
-    async mounted() {
-        await this.doSync()
+    // Non-async mounted — prevents uncaught promise rejection in Vue 2 Options API
+    mounted() {
+        this.doSync().catch(err => {
+            if (!this._alive) return
+            console.error('[V1RonTalk] CharacterList mount error:', err)
+            this.syncing = false
+            this.syncError = 'Connection error — click Refresh to retry'
+        })
+    },
+    beforeDestroy() {
+        this._alive = false
     },
     methods: {
         async doSync() {
+            if (!this._alive) return
             this.syncing = true
             this.syncError = ''
 
-            // Sync NC user to WP and get initial balance + characters
-            const syncResult = await this.syncUser()
+            let syncResult = { success: false }
+            try {
+                syncResult = await this.syncUser()
+            } catch (err) {
+                console.warn('[V1RonTalk] syncUser threw:', err)
+            }
+
+            if (!this._alive) return
+
             if (syncResult.success) {
                 this.balance = syncResult.balance || ''
                 if (syncResult.characters && syncResult.characters.length > 0) {
@@ -112,21 +130,28 @@ export default {
                     this.syncing = false
                     return
                 }
-            } else {
-                this.syncError = syncResult.error || 'Could not sync account'
+            } else if (syncResult.error) {
+                this.syncError = syncResult.error
             }
 
             this.syncing = false
             await this.loadCharacters()
         },
         async loadCharacters() {
+            if (!this._alive) return
             this.loading = true
             this.error = ''
-            const result = await this.getCharacters(this.ncUserId)
-            if (result.success) {
-                this.chars = result.characters || []
-            } else {
-                this.error = result.error || 'Failed to load characters'
+            try {
+                const result = await this.getCharacters(this.ncUserId)
+                if (!this._alive) return
+                if (result.success) {
+                    this.chars = result.characters || []
+                } else {
+                    this.error = result.error || 'Failed to load characters'
+                }
+            } catch (err) {
+                if (!this._alive) return
+                this.error = err.message || 'Failed to load characters'
             }
             this.loading = false
         },
